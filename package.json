@@ -1,0 +1,33 @@
+{
+  "name": "node-threadrunner",
+  "version": "1.0.0",
+  "description": "Execute code in a background worker thread on node.js",
+  "main": "src/ThreadRunner.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node --trace-warnings ./test/threadRunner.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brandon-fry/node-threadrunner.git"
+  },
+  "keywords": [
+    "thread",
+    "pool",
+    "threadpool",
+    "thread",
+    "pool",
+    "worker",
+    "worker",
+    "pool",
+    "worker_threads"
+  ],
+  "author": "Brandon Fry",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/brandon-fry/node-threadrunner/issues"
+  },
+  "homepage": "https://github.com/brandon-fry/node-threadrunner#readme"
+}

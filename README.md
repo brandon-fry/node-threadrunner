@@ -18,7 +18,8 @@ https://nodejs.org/api/worker_threads.html
 - Easily update parameters for background task
 
 ## Requirements
-* node 12.x
+
+- node 12.x
 
 ## Install
 
@@ -31,7 +32,7 @@ Install via npm:
 To use node-threadrunner in a node.js application:
 
 ```js
-const ThreadRunner = require('node-threadrunner');
+const ThreadRunner = require("node-threadrunner");
 
 const evalScript = `
   return workerProps.sampleCompute.doStuff(params[0], params[1]);
@@ -51,17 +52,18 @@ const threadrunner = new ThreadRunner({
 });
 
 // Run a task in a background worker thread. Timeout in 1500ms.
-threadrunner.run(evalScript, 1500, "sampleData1", "sampleData2")
-  .then(result => console.log("success: ", result))
-  .catch(error => {
-    if (error.message === 'TimeoutError')
+threadrunner
+  .run(evalScript, 1500, "sampleData1", "sampleData2")
+  .then((result) => console.log("success: ", result))
+  .catch((error) => {
+    if (error.message === "TimeoutError")
       console.log("The task did not complete in time");
-    else
-      console.log("An error occurred:", error);
-  })
+    else console.log("An error occurred:", error);
+  });
 ```
 
 ## Worker Threads
+
 This module allows a user to execute concurrent run tasks on a configured number of
 background threads. If the number of tasks exceeds the number of available threads,
 tasks are queued via returned run promises that are fulfilled in the order that they
@@ -76,22 +78,20 @@ greater will be terminated.
 
 ## ThreadRunner API
 
-`
-constructor(Object: options)
-`
+`constructor(Object: options)`
+
 ```
 Options object:
-maxThreadCount: integer  Defaults to config.js:maxThreadcount. The maximum number of workers allowed. Must be less than minThreadCount.
-minThreadCount: integer  Defaults to config.js:minThreadCount. The minimum number of workers allowed. Must be more than maxThreadCount.
-pollingInterval: integer  Defaults to config.js:pollingInterval. The interval in millisecondsworkers to check for expired workers.
+maxThreadCount: integer  Defaults to config.js:maxThreadcount. The maximum number of workers allowed. Must be more than minThreadCount.
+minThreadCount: integer  Defaults to config.js:minThreadCount. The minimum number of workers allowed. Must be less than maxThreadCount.
+pollingInterval: integer  Defaults to config.js:pollingInterval. The interval in milliseconds to check for expired workers.
 workerIdleTimeout: integer  Defaults to config.js:workerIdleTimeout. The number of milliseconds a worker needs to be idle before expiring.
 workerPropsScript: string  Script that is evaluated and stored as "workerProps" for each worker.
 workerOptions: object  Options passed to each worker.
 ```
 
-`
-run(script: string, timeout: integer, ...params: [] | arguments)
-`
+`run(script: string, timeout: integer, ...params: [] | arguments)`
+
 ```
 Parameters:
 script  The script to evaluate.
@@ -102,15 +102,15 @@ Return:
 Promise   Resolves with script eval result or rejects with 'NoWorkerError', 'TimeoutError', 'EvalError', 'ExitError', or 'MessageError'.
 ```
 
-`
-terminate()
-`
+`terminate()`
+
 ```
 Return:
 Promise   Resolves when all workers in the pool have exited.
 ```
 
 The following ThreadRunner class properties are readable:
+
 ```
 maxThreadCount
 minThreadCount
@@ -121,6 +121,7 @@ workerPropsScript
 ```
 
 The following ThreadRunner class properties are writeable:
+
 ```
 maxThreadCount
 minThreadCount
@@ -129,6 +130,7 @@ workerIdleTimeout
 ```
 
 ## Test
+
     npm run test
 
 ## Examples
@@ -136,4 +138,5 @@ workerIdleTimeout
 See `test/threadRunner.test.js` for example usages of the ThreadRunner class.
 
 ## License
+
 [MIT](LICENSE)

@@ -1,6 +1,6 @@
 {
   "name": "node-threadrunner",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Execute code in a background worker thread on node.js",
   "main": "src/ThreadRunner.js",
   "directories": {

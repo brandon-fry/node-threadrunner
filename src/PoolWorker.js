@@ -1,6 +1,7 @@
 'use strict';
 
 const EventEmitter = require('events');
+const { poolConfig } = require('./config.js');
 const {
   Worker, workerData, MessageChannel, isMainThread, parentPort, threadId
 } = require('worker_threads');
@@ -186,7 +187,9 @@ if (isMainThread) {
           this._events.emit('exit', this._threadId, exitCode);
         }
 
-        console.debug("Worker exited with code: ", exitCode);
+        if (poolConfig.debugLogs) {
+          console.debug("Worker exited with code: ", exitCode);
+        }
       }
 
       /**
@@ -233,7 +236,9 @@ if (isMainThread) {
         this._workerState = WorkerState.READY;
         this._events.emit('ready', this._threadId);
 
-        console.debug(`Worker ${this._threadId} reporting ready`);
+        if (poolConfig.debugLogs) {
+          console.debug(`Worker ${this._threadId} reporting ready`);
+        }
       }
     }
 }

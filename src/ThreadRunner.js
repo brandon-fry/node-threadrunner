@@ -346,7 +346,9 @@ module.exports =
     _dropWorker(threadId) {
       let worker = this._threadIdtoWorker.get(threadId);
       if (worker) {
-        console.debug(`Dropping worker: ${threadId}`)
+        if (poolConfig.debugLogs) {
+          console.debug(`Dropping worker: ${threadId}`)
+        }
 
         worker.terminate()
           .catch(error => console.error(`An error occurred while terminating worker ${threadId}: ${error}`))
@@ -397,7 +399,10 @@ module.exports =
 
         // Add request to queue for next ready worker to handle.
         if (this.getThreadCount() > 0) {
-          console.debug("Waiting for ready worker");
+          if (poolConfig.debugLogs) {
+            console.debug("Waiting for ready worker");
+          }
+
           this._requestQueue.push({
             resolve: (worker) => { resolve(worker.eval(script, params)) },
             reject: reject

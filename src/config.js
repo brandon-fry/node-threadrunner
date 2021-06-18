@@ -5,6 +5,3 @@ module.exports.poolConfig = {
   workerIdleTimeout: 30000,
   debugLogs: false,
 };
-
-const origConsoleDebug = console.debug;
-console.debug = function (msg) { if (module.exports.poolConfig.debugLogs) { origConsoleDebug(msg) } };

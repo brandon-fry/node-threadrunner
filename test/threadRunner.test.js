@@ -2,7 +2,7 @@
 * Test file for the ThreadRunner module. Execute with 'npm run test'.
 */
 
-const ThreadRunner = require('../src/ThreadRunner.js');
+const ThreadRunner = require('../dist/ThreadRunner.js');
 const { poolConfig } = require('../src/config.js');
 const assert = require("assert");
 

@@ -2,11 +2,12 @@
   "name": "node-threadrunner",
   "version": "1.0.2",
   "description": "Execute code in a background worker thread on node.js",
-  "main": "src/ThreadRunner.js",
+  "main": "dist/ThreadRunner.js",
   "directories": {
     "test": "test"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "test": "node --trace-warnings ./test/threadRunner.test.js"
   },
   "repository": {
@@ -29,5 +30,10 @@
   "bugs": {
     "url": "https://github.com/brandon-fry/node-threadrunner/issues"
   },
-  "homepage": "https://github.com/brandon-fry/node-threadrunner#readme"
+  "homepage": "https://github.com/brandon-fry/node-threadrunner#readme",
+  "devDependencies": {
+    "@tsconfig/node12": "^1.0.9",
+    "@types/node": "^16.3.2",
+    "typescript": "^4.3.5"
+  }
 }

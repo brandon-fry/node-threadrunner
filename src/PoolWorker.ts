@@ -1,17 +1,37 @@
 'use strict';
 
+// Make typescript treat variables as module scope (which they already are,
+// but typescript doesn't seem to obey the commonJS module scoping)
+export {};
+
 const EventEmitter = require('events');
-const { poolConfig } = require('./config.js');
+const { poolConfig } = require('../config.js');
 const {
-  Worker, workerData, MessageChannel, isMainThread, parentPort, threadId
+  Worker, workerData, MessageChannel, MessagePort, isMainThread, parentPort, threadId
 } = require('worker_threads');
 
-const WorkerState = {
-  INITIALIZING: 1,
-  BUSY: 2,
-  READY: 3,
-  DEAD: 4,
+enum WorkerState {
+  INITIALIZING,
+  BUSY,
+  READY,
+  DEAD,
 }
+
+interface WorkerInitMessage {
+  threadId: number
+}
+
+interface WorkerEvalMessage {
+  script: string,
+  params: any[]
+}
+
+interface WorkerSetupMessage {
+  workerPropsScript: string,
+  workerPort: InstanceType<typeof MessagePort>,
+}
+
+type WorkerResultMessage = any
 
 //------------------------------------------------------------------------------
 // Main thread execution
@@ -25,6 +45,16 @@ if (isMainThread) {
      * on demand in the thread.
      */
     class PoolWorker extends Worker {
+    private _events: InstanceType<typeof EventEmitter>;
+      private _pendingEvalReject: ((reason?: any) => void) | null;
+      private _pendingEvalResolve: ((value: unknown) => void) | null;
+      private _threadId: number;
+      private _timeStamp: number;
+      private _timeoutObj: ReturnType<typeof setTimeout> | null;
+      private _workerState: WorkerState;
+      private _implChannel: InstanceType<typeof MessageChannel>;
+      private _mainPort: InstanceType<typeof MessagePort>;
+      private _workerPort: InstanceType<typeof MessagePort>;
 
       /**
        * Constructor.
@@ -44,8 +74,8 @@ if (isMainThread) {
 
         this._implChannel = new MessageChannel();
         this._mainPort = this._implChannel.port2;
-        this._mainPort.on('message', (message) => this._handleResult(message));
-        this._mainPort.on('messageerror', (error) => this._handleMessageError(error));
+        this._mainPort.on('message', (message: any) => this._handleResult(message));
+        this._mainPort.on('messageerror', (error: Error) => this._handleMessageError(error));
         this._workerPort = this._implChannel.port1;
 
         // Send request to set up worker.
@@ -58,12 +88,12 @@ if (isMainThread) {
         );
 
         // On worker error, the thread is terminated.
-        this.on('error', (error) => this._handleError(error));
+        this.on('error', (error: Error) => this._handleError(error));
 
         // On worker exit, the thread is stopped.
-        this.on('exit', (code) => this._handleExit(code));
+        this.on('exit', (code: number) => this._handleExit(code));
 
-        this.once('message', (msg) => {
+        this.once('message', (msg: WorkerInitMessage) => {
           // Worker is now ready
           this._threadId = msg.threadId;
           this._resetReady();
@@ -114,10 +144,11 @@ if (isMainThread) {
        * Evaluates script on the worker thread and fulfills the returned promise with the
        * evaluated result or rejects with 'EvalError', 'ExitError', or 'MessageError'.
        * @param {string} script  JavaScript code to be evaluated.
+       * @param {params} script  List of parameters accessed from worker thread.
        * @return {Promise}
        * @public
        */
-      eval(script, params) {
+      eval(script: string, params: any[]) {
         this._mainPort.postMessage({ script: script, params: params }, []);
         this._workerState = WorkerState.BUSY;
 
@@ -144,7 +175,9 @@ if (isMainThread) {
       terminate() {
         this._mainPort.unref();
         this._events.removeAllListeners();
-        clearTimeout(this._timeoutObj);
+        if (this._timeoutObj) {
+          clearTimeout(this._timeoutObj);
+        }
         return super.terminate();
       }
 
@@ -154,7 +187,7 @@ if (isMainThread) {
        * @param {Error} error  The error code received from the worker.
        * @private
        */
-      _handleError(error) {
+      _handleError(error: Error) {
         this._workerState = WorkerState.DEAD;
         if (this._pendingEvalReject) {
           this._pendingEvalReject(new Error('EvalError'));
@@ -175,7 +208,7 @@ if (isMainThread) {
        * @param {integer} exitCode  The exit code received from the worker.
        * @private
        */
-      _handleExit(exitCode) {
+      _handleExit(exitCode: number) {
         this._workerState = WorkerState.DEAD;
         if (this._pendingEvalReject) {
           this._pendingEvalReject(new Error('ExitError'));
@@ -198,7 +231,7 @@ if (isMainThread) {
        * @param {Error} error  The error code received from the worker.
        * @private
        */
-      _handleMessageError(error) {
+      _handleMessageError(error: Error) {
         if (this._pendingEvalReject) {
           this._pendingEvalReject(new Error('MessageError'));
         }
@@ -215,7 +248,7 @@ if (isMainThread) {
        * @param {any} result  The value received from the worker.
        * @private
        */
-      _handleResult(result) {
+      _handleResult(result: WorkerResultMessage) {
         if (this._pendingEvalResolve) {
           this._pendingEvalResolve(result);
         }
@@ -246,10 +279,10 @@ if (isMainThread) {
 // Worker thread execution
 //------------------------------------------------------------------------------
 else {
-  let workerPort;
+  let workerPort: InstanceType<typeof MessagePort>;
   let workerProps = {};
 
-  parentPort.once('message', (value) => {
+  parentPort.once('message', (value: WorkerSetupMessage) => {
     // Set up worker properties if provided.
     if (value.workerPropsScript) {
       try {
@@ -267,7 +300,7 @@ else {
     workerPort = value.workerPort;
 
     // Connect to requests from the main thread.
-    workerPort.on('message', (value) => {
+    workerPort.on('message', (value: WorkerEvalMessage) => {
       workerPort.postMessage(
         // Function is evaluated in the global scope, so pass through params that the passed script can use.
         Function('workerProps', 'workerData', 'threadId', 'exports', 'require', 'module', '__filename', '__dirname', 'params', value.script)(

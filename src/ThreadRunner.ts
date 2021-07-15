@@ -1,8 +1,26 @@
 'use strict';
 
+// Make typescript treat variables as module scope (which they already are,
+// but typescript doesn't seem to obey the commonJS module scoping)
+export {};
+
 const EventEmitter = require('events');
 const PoolWorker = require('./PoolWorker.js');
-const { poolConfig } = require('./config.js');
+const { poolConfig } = require('../config.js');
+
+interface ThreadRunnerOptions {
+  maxThreadCount?: number
+  minThreadCount?: number
+  pollingInterval?: number
+  workerIdleTimeout?: number
+  workerPropsScript?: string
+  workerOptions?: any
+}
+
+interface RequestQueueType {
+  resolve: (worker: InstanceType<typeof PoolWorker>) => void,
+  reject: (reason?: any) => void
+}
 
 module.exports =
   /**
@@ -25,6 +43,18 @@ module.exports =
    * https://nodejs.org/api/worker_threads.html#worker_threads_new_worker_filename_options
    */
   class ThreadRunner {
+    private readonly _events: typeof EventEmitter;
+    private _pendingWorkerCount: number;
+    private readonly _requestQueue: RequestQueueType[];
+    private readonly _threadIdtoWorker: Map<number, InstanceType<typeof PoolWorker>>;
+    private _timeoutObj: ReturnType<typeof setTimeout> | null;
+    
+    private _maxThreadCount: number;
+    private _minThreadCount: number;
+    private _pollingInterval: number;
+    private _workerIdleTimeout: number;
+    private _workerPropsScript: string;
+    private _workerOptions: any;
 
     /**
      * Constructor.
@@ -36,37 +66,34 @@ module.exports =
      * @param {string} options.workerPropsScript  Script that is evaluated and stored as "workerProps" for each worker.
      * @param {object} options.workerOptions  Options passed to each worker.
      */
-    constructor(options = {}) {
+    constructor(options: ThreadRunnerOptions = {}) {
       this._events = new EventEmitter();
       this._pendingWorkerCount = 0;
       this._requestQueue = [];
-      this._threadIdtoWorker = new Map();
+      this._threadIdtoWorker = new Map<number, InstanceType<typeof PoolWorker>>();
       this._timeoutObj = null;
+      this._maxThreadCount = poolConfig.maxThreadCount;
+      this._minThreadCount = poolConfig.minThreadCount;
+      this._pollingInterval = poolConfig.pollingInterval;
+      this._workerIdleTimeout = poolConfig.workerIdleTimeout;
+      this._workerPropsScript = "";
+      this._workerOptions = {};
 
-      // Read passed option values or set to defaults.
-      ({
-        maxThreadCount: this.maxThreadCount = poolConfig.maxThreadCount,
-        minThreadCount: this.minThreadCount = poolConfig.minThreadCount,
-        pollingInterval: this.pollingInterval = poolConfig.pollingInterval,
-        workerIdleTimeout: this.workerIdleTimeout = poolConfig.workerIdleTimeout,
-        workerPropsScript: this._workerPropsScript = '',
-        workerOptions: this._workerOptions = {}
-      } = options);
-
-      // Double check these values since they're guarded in the setter and
-      // may not get assigned if a bad value is provided.
-      if (this.maxThreadCount === undefined || this.maxThreadCount === null) {
-        this.maxThreadCount = poolConfig.maxThreadCount;
-      }
-      if (this.minThreadCount === undefined || this.minThreadCount === null) {
-        this.minThreadCount = poolConfig.minThreadCount;
-      }
-      if (this.pollingInterval === undefined || this.pollingInterval === null) {
-        this.pollingInterval = poolConfig.pollingInterval;
-      }
-      if (this.workerIdleTimeout === undefined || this.workerIdleTimeout === null) {
-        this.workerIdleTimeout = poolConfig.workerIdleTimeout;
-      }
+      // Set these properties through the setters so that the received value can be checked.
+      if (options.maxThreadCount)
+        this.maxThreadCount = options.maxThreadCount;
+      if (options.minThreadCount)
+        this.minThreadCount = options.minThreadCount;
+      if (options.pollingInterval)
+        this.pollingInterval = options.pollingInterval;
+      if (options.workerIdleTimeout)
+        this.workerIdleTimeout = options.workerIdleTimeout;
+      
+      // No setters for these values. Assign directly.
+      if (options.workerPropsScript)
+        this._workerPropsScript = options.workerPropsScript;
+      if (options.workerOptions)
+        this._workerOptions = options.workerOptions;
     }
 
     /**
@@ -203,7 +230,7 @@ module.exports =
      *     'EvalError', 'ExitError', or 'MessageError'.
      * @public
      */
-    async run(script, timeout, ...params) {
+    async run(script: string, timeout: number, ...params: any[]) {
       if (timeout) {
         return Promise.race([
           this._waitAndReject(timeout),
@@ -227,7 +254,10 @@ module.exports =
       this._events.emit('terminate');
 
       while (this._requestQueue.length > 0) {
-        this._requestQueue.shift().reject();
+        const request = this._requestQueue.shift();
+        if (request) {
+          request.reject();
+        }
       }
 
       if (this._timeoutObj) {
@@ -242,10 +272,10 @@ module.exports =
 
     /**
      * Removes workers in the pool that have reached the set workerIdleTimeout.
-     * @param {object} self  This class object ("this").
+     * @param {object} self  This class instance ("this").
      * @private
      */
-    _clearExpiredWorkers(self) {
+    _clearExpiredWorkers(self: InstanceType<typeof ThreadRunner>) {
       self._threadIdtoWorker.forEach((worker, key) => {
         if (self.getThreadCount() > self._minThreadCount &&
           worker.isReady() &&
@@ -312,28 +342,30 @@ module.exports =
           worker.events.removeAllListeners();
 
           // Handle dead workers.
-          worker.events.on('error', (threadId) => {
+          worker.events.on('error', (threadId: number) => {
             this._dropWorker(threadId);
             this._createMinWorkers();
           });
-          worker.events.on('exit', (threadId) => {
-            this._dropWorker(threadId, true);
+          worker.events.on('exit', (threadId: number) => {
+            this._dropWorker(threadId);
             this._createMinWorkers();
           });
 
           // Check for queued requests each time this worker becomes ready.
-          worker.events.on('ready', (threadId) => {
+          worker.events.on('ready', (threadId: number) => {
             if (this._requestQueue.length > 0) {
-              this._requestQueue.shift().resolve(this._threadIdtoWorker.get(threadId));
+              const request = this._requestQueue.shift();
+              request && request.resolve(this._threadIdtoWorker.get(threadId));
             }
           });
 
           // This worker has just become ready, check for pending requests.
           if (this._requestQueue.length > 0) {
-            this._requestQueue.shift().resolve(worker);
+            const request = this._requestQueue.shift();
+            request && request.resolve(worker);
           }
 
-          resolve();
+          resolve('Success');
         });
       });
     }
@@ -343,7 +375,7 @@ module.exports =
      * @param {integer} threadId  The ID of the pool worker to drop.
      * @private
      */
-    _dropWorker(threadId) {
+    _dropWorker(threadId: number) {
       let worker = this._threadIdtoWorker.get(threadId);
       if (worker) {
         if (poolConfig.debugLogs) {
@@ -351,7 +383,7 @@ module.exports =
         }
 
         worker.terminate()
-          .catch(error => console.error(`An error occurred while terminating worker ${threadId}: ${error}`))
+          .catch((error: Error) => console.error(`An error occurred while terminating worker ${threadId}: ${error}`))
 
         this._threadIdtoWorker.delete(threadId);
 
@@ -373,7 +405,7 @@ module.exports =
      * @return {Promise} Resolves with script eval result or rejects with 'NoWorkerError'.
      * @public
      */
-    async _getWorkerAndEval(script, params) {
+    async _getWorkerAndEval(script: string, params: any[]) {
       return new Promise((resolve, reject) => {
         // Check for a ready worker in the pool.
         for (const worker of this._threadIdtoWorker.values()) {
@@ -422,7 +454,7 @@ module.exports =
      * @return {Promise}
      * @private
      */
-    _waitAndReject(ms) {
+    _waitAndReject(ms: number) {
       return new Promise((resolve, reject) => {
         setTimeout(() => reject(new Error('TimeoutError')), ms);
       });

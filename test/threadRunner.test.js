@@ -3,7 +3,7 @@
 */
 
 const ThreadRunner = require('../dist/ThreadRunner.js');
-const { poolConfig } = require('../src/config.js');
+const { poolConfig } = require('../config.js');
 const assert = require("assert");
 
 //------------------------------------------------------------------------------
